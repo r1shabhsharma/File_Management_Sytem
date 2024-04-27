@@ -47,7 +47,7 @@ class FileSystemRPC:
 
     # function for server to update the received file on its local storage
     def updateFile(self, fileName, fileData, replaceFile=False):
-        print('Trying to Upload file:', fileName)
+        print('Trying to Upload file:', fileName, '\nThread identifier of current process: ', threading.get_ident())
         with self.lock:
             currentPath = os.getcwd()
             serverPath = os.path.join(currentPath, 'local-files')
@@ -77,14 +77,13 @@ class FileSystemRPC:
                 
     # Function to fetch the file
     def getFile(self, fileName):
-
         filePath = os.path.join(self.fileDirectory, fileName)
         if fileExists(filePath):
             print(f"\nFile found!")
-            fileData = {'content': getFileData(filePath), 'source': "localhost"}
+            return {'content': getFileData(filePath)}
         else:
-            print(f"\nFile not founddd!")
-        return fileData
+            print(f"\nFile not found :(")
+            return {'content': 'File not found'}
 
 def startServer(serverId, port, fileDirectory):
     server = ThreadedXMLRPCServer((address, port))
