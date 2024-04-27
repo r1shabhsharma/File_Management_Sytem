@@ -5,7 +5,7 @@ import os
 def requestFile(fileName, localServer, filePath):
     try:
         proxy = xmlrpc.client.ServerProxy(f"http://{localServer}/")
-        fileData = proxy.getFile(fileName, filePath)
+        fileData = proxy.getFile(fileName)
         if fileData['content']!= "File not found":
             print(f"\nFile found!")
             if fileData['source'] != "localhost":
