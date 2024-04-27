@@ -4,6 +4,10 @@ import sys
 import threading
 import time
 from xmlrpc.server import SimpleXMLRPCServer
+from socketserver import ThreadingMixIn
+
+class ThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer):
+    pass
 
 class FileData:
     def __init__(self, file_name, file_hash):
@@ -83,7 +87,7 @@ class FileSystemRPC:
         return fileData
 
 def startServer(serverId, port, fileDirectory):
-    server = SimpleXMLRPCServer((address, port))
+    server = ThreadedXMLRPCServer((address, port))
     server.register_instance(FileSystemRPC(serverId, fileDirectory))
     setHashCodes(fileDirectory)
     print(f"Server {serverId} now listening on port {port}...")
