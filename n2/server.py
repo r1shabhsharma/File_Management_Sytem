@@ -1,10 +1,11 @@
 import hashlib
-from xmlrpc.server import SimpleXMLRPCServer
-import xmlrpc.client
 import os
 import sys
 import threading
 import time
+from xmlrpc.server import SimpleXMLRPCServer
+
+hashCodes = set()
 
 def getFileData(filePath):
     with open(filePath, 'r') as file:
@@ -37,39 +38,19 @@ class FileSystemRPC:
             # deliberately adding this to ensure time gap for better analysis
             time.sleep(5)
 
+            filePath = os.path.join(serverPath, fileName)
+            combined_data = fileName + fileData['content']
+            fileHashCode = hashlib.sha256(combined_data.encode()).hexdigest()
 
-            if fileExists(os.path.join(self.fileDirectory, fileName)):
-                content_hash = self.generate_hash(fileData['content'])
-                # Append the hash to the original file name
-                hashed_filename = f"{fileName}_{content_hash}"
-                filePath = os.path.join(serverPath, hashed_filename)
+            if filePath and fileHashCode in hashCodes:
+                return 'A file with the same name and content already exists' 
             else:
-                filePath = os.path.join(serverPath, fileName)
-
-            print('done')
-            with open(filePath, 'w') as file:
-                file.write(fileData['content'])
-        return "File updated successfully"
-
-        
-            # # Generate hash of the file content
-            # content_hash = self.generate_hash(fileData['content'])
-            # # Append the hash to the original file name
-            # hashed_filename = f"{fileName}_{content_hash}"
-            # filePath = os.path.join(serverPath, hashed_filename)
-
-            # print('Doneeee')
-
-            # # Check if a file with the same content already exists
-            # if fileExists(filePath):
-            #     return "File already exists"
-            # else:
-            #     with open(filePath, 'w') as file:
-            #         file.write(fileData['content'])
-            #     return "File updated successfully"
-
-    # function to get the file
-    # It searches for the file in a ring topology
+                with open(filePath, 'w') as file:
+                    file.write(fileData['content'])
+                    hashCodes.add(fileHashCode)
+                    return "File updated successfully"  # Return success message
+                
+    # Function to fetch the file
     def getFile(self, fileName):
 
         filePath = os.path.join(self.fileDirectory, fileName)
@@ -83,12 +64,24 @@ class FileSystemRPC:
 def startServer(serverId, port, fileDirectory):
     server = SimpleXMLRPCServer((address, port))
     server.register_instance(FileSystemRPC(serverId, fileDirectory))
+    setHashCodes(fileDirectory)
     print(f"Server {serverId} now listening on port {port}...")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nQuiting...")
         sys.exit(0)
+
+# Assign hash codes of all files to the set
+def setHashCodes(fileDirectory):
+    files = os.listdir(fileDirectory)
+    for fileName in files:
+        filePath = os.path.join(fileDirectory, fileName)
+        fileData = getFileData(filePath)
+        combined_data = fileName + fileData
+        hashValue = hashlib.sha256(combined_data.encode()).hexdigest()
+        hashCodes.add(hashValue)
+        print(hashCodes)
 
 if __name__ == "__main__":
     address = 'localhost'
