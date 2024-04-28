@@ -39,35 +39,15 @@ class FileSystemRPC:
         self.serverId = serverId
         self.fileDirectory = fileDirectory
         self.lock = threading.Lock()
-        self.token = None
-        self.token_holder = None  # Keep track of the token holder
+        self.threadResponse = ''
 
     def generate_hash(self, content):
         # Generate a hash value based on the content using SHA-256
         hash_object = hashlib.sha256(content.encode())
         hash_value = hash_object.hexdigest()
         return hash_value
-
-    # function for server to update the received file on its local storage
-    def acquire_token(self, user):
-        logging.info('Token acquisition request received from user: %s', user)
-        with self.lock:
-            if self.token is None:
-                self.token = user
-                self.token_holder = user  # Update token holder
-                logging.info('Token acquired by user: %s', user)
-                return True
-            else:
-                logging.warning('Token is currently held by another user: %s', self.token)
-                return False
-
-    def pass_token(self):
-        logging.info('Token released by user: %s', self.token_holder)
-        self.token = None
-        self.token_holder = None  # Reset token holder
-        return "Token passed successfully"
-
-    def updateFile(self, fileName, fileData, replaceFile=False):
+    
+    def updateFileThread(self, fileName, fileData, replaceFile=False):
         logging.info('Trying to upload file: %s\nThread identifier of current process: %s', fileName, threading.get_ident())
         with self.lock:
             currentPath = os.getcwd()
@@ -80,13 +60,14 @@ class FileSystemRPC:
             
             for hashed_file_data in hashCodes:
                 if fileHashCode == hashed_file_data.file_hash and filePath:
-                    logging.error('A file with the same name and content already exists')
-                    return 'A file with the same name and content already exists'
-            
+                    self.threadResponse= 'A file with the same name and content already exists'
+                    logging.error(self.threadResponse)
+
             if fileExists(filePath):
                 if not replaceFile:
-                    logging.info('User choice')
-                    return 'User choice'
+                    self.threadResponse= 'User choice'
+                    logging.error(self.threadResponse)
+                    return
                 for hashed_file_data in hashCodes:
                     if fileName == hashed_file_data.file_name:
                         hashed_file_data.file_hash = self.generate_hash(fileName + fileData['content'])
@@ -94,9 +75,19 @@ class FileSystemRPC:
             with open(filePath, 'w') as file:
                 file.write(fileData['content'])
                 hashCodes.add(FileData(fileName, fileHashCode))
-                logging.info('File updated successfully')
-                return "File updated successfully"
-                
+                self.threadResponse= "File updated successfully"  # Return success message
+                logging.error(self.threadResponse)
+                    
+    def updateFile(self, fileName, fileData, replaceFile=False):
+        # Create a thread for file update process
+        update_thread = threading.Thread(target=self.updateFileThread, args=(fileName, fileData, replaceFile))
+        update_thread.start()
+         # Wait for the thread to finish
+        update_thread.join()
+    
+        # Return the response from thread
+        return self.threadResponse
+
     def getFile(self, fileName):
         filePath = os.path.join(self.fileDirectory, fileName)
         if fileExists(filePath):
