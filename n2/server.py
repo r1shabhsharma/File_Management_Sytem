@@ -40,6 +40,8 @@ class FileSystemRPC:
         self.fileDirectory = fileDirectory
         self.lock = threading.Lock()
         self.threadResponse = ''
+        self.token = None
+        self.token_holder = None  # Keep track of the token holder
 
     def generate_hash(self, content):
         # Generate a hash value based on the content using SHA-256
@@ -47,6 +49,26 @@ class FileSystemRPC:
         hash_value = hash_object.hexdigest()
         return hash_value
     
+    
+    # function for server to update the received file on its local storage
+    def acquire_token(self, user):
+        logging.info('Token acquisition request received from user: %s', user)
+        with self.lock:
+            if self.token is None:
+                self.token = user
+                self.token_holder = user  # Update token holder
+                logging.info('Token acquired by user: %s', user)
+                return True
+            else:
+                logging.warning('Token is currently held by another user: %s', self.token)
+                return False
+
+    def pass_token(self):
+        logging.info('Token released by user: %s', self.token_holder)
+        self.token = None
+        self.token_holder = None  # Reset token holder
+        return "Token passed successfully"
+
     def updateFileThread(self, fileName, fileData, replaceFile=False):
         logging.info('Trying to upload file: %s\nThread identifier of current process: %s', fileName, threading.get_ident())
         with self.lock:
