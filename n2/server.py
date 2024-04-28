@@ -3,6 +3,7 @@ import os
 import sys
 import threading
 import time
+import logging
 from xmlrpc.server import SimpleXMLRPCServer
 from socketserver import ThreadingMixIn
 
@@ -38,6 +39,8 @@ class FileSystemRPC:
         self.serverId = serverId
         self.fileDirectory = fileDirectory
         self.lock = threading.Lock()
+        self.token = None
+        self.token_holder = None  # Keep track of the token holder
 
     def generate_hash(self, content):
         # Generate a hash value based on the content using SHA-256
@@ -46,8 +49,26 @@ class FileSystemRPC:
         return hash_value
 
     # function for server to update the received file on its local storage
+    def acquire_token(self, user):
+        logging.info('Token acquisition request received from user: %s', user)
+        with self.lock:
+            if self.token is None:
+                self.token = user
+                self.token_holder = user  # Update token holder
+                logging.info('Token acquired by user: %s', user)
+                return True
+            else:
+                logging.warning('Token is currently held by another user: %s', self.token)
+                return False
+
+    def pass_token(self):
+        logging.info('Token released by user: %s', self.token_holder)
+        self.token = None
+        self.token_holder = None  # Reset token holder
+        return "Token passed successfully"
+
     def updateFile(self, fileName, fileData, replaceFile=False):
-        print('Trying to Upload file:', fileName, '\nThread identifier of current process: ', threading.get_ident())
+        logging.info('Trying to upload file: %s\nThread identifier of current process: %s', fileName, threading.get_ident())
         with self.lock:
             currentPath = os.getcwd()
             serverPath = os.path.join(currentPath, 'local-files')
@@ -57,46 +78,45 @@ class FileSystemRPC:
             filePath = os.path.join(serverPath, fileName)
             fileHashCode = self.generate_hash(fileName + fileData['content'])
             
-
             for hashed_file_data in hashCodes:
                 if fileHashCode == hashed_file_data.file_hash and filePath:
+                    logging.error('A file with the same name and content already exists')
                     return 'A file with the same name and content already exists'
             
             if fileExists(filePath):
                 if not replaceFile:
+                    logging.info('User choice')
                     return 'User choice'
                 for hashed_file_data in hashCodes:
-                    print(hashed_file_data.file_name)
-                    if(fileName == hashed_file_data.file_name):
+                    if fileName == hashed_file_data.file_name:
                         hashed_file_data.file_hash = self.generate_hash(fileName + fileData['content'])
                         
             with open(filePath, 'w') as file:
                 file.write(fileData['content'])
                 hashCodes.add(FileData(fileName, fileHashCode))
-                return "File updated successfully"  # Return success message
+                logging.info('File updated successfully')
+                return "File updated successfully"
                 
-    # Function to fetch the file
     def getFile(self, fileName):
         filePath = os.path.join(self.fileDirectory, fileName)
         if fileExists(filePath):
-            print(f"\nFile found!")
+            logging.info('File found: %s', fileName)
             return {'content': getFileData(filePath)}
         else:
-            print(f"\nFile not found :(")
+            logging.error('File not found: %s', fileName)
             return {'content': 'File not found'}
 
 def startServer(serverId, port, fileDirectory):
-    server = ThreadedXMLRPCServer((address, port))
+    server = ThreadedXMLRPCServer((serverId, port))
     server.register_instance(FileSystemRPC(serverId, fileDirectory))
     setHashCodes(fileDirectory)
-    print(f"Server {serverId} now listening on port {port}...")
+    logging.info('Server %s now listening on port %s...', serverId, port)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nQuiting...")
+        logging.info('Quitting...')
         sys.exit(0)
 
-# Assign hash codes of all files to the set
 def setHashCodes(fileDirectory):
     files = os.listdir(fileDirectory)
     for fileName in files:
@@ -107,8 +127,9 @@ def setHashCodes(fileDirectory):
         hashCodes.add(FileData(fileName, hashValue))
 
 if __name__ == "__main__":
-    address = 'localhost'
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    serverId = 'localhost'
     port = 8002
     currentPath = os.getcwd()
     serverPath = os.path.join(currentPath, 'local-files')
-    startServer(address, port, serverPath)
+    startServer(serverId, port, serverPath)
