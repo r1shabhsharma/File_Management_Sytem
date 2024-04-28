@@ -1,17 +1,27 @@
 import xmlrpc.client
 import threading
+import time
 
 def updateFile(fileName, content, localServer, port):
     try:
         proxy = xmlrpc.client.ServerProxy(f"http://{localServer}:{port}/")
-        token_acquired = proxy.acquire_token("provider1")  # Provider 1 identifier
+        token_acquired = False
+        attempts = 0
+        max_attempts = 10  # Maximum number of attempts to acquire the token
+        while not token_acquired and attempts < max_attempts:
+            token_acquired = proxy.acquire_token("provider1")  # Provider 1 identifier
+            if not token_acquired:
+                print("Failed to acquire token. Retrying...")
+                time.sleep(3)  # Wait for a short duration before retrying
+                attempts += 1
         if token_acquired:
+            print("Token Acquired")
             threadInstance = threading.Thread(target=lambda: updateFileThread(proxy, fileName, content))
             threadInstance.start()
             threadInstance.join()
             proxy.pass_token()
         else:
-            print("Failed to acquire token. The server is currently handling another request. Please try again later.")
+            print("Failed to acquire token after multiple attempts. Please try again later.")
     except Exception as e:
         print(f"There is an error while updating file on local server {localServer}:{port}", e)
 
